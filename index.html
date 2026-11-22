@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111318">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Lector CBZ</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <h1>Lector CBZ</h1>
+  <label class="btn primary" for="file-input">+ Importar .cbz</label>
+  <input id="file-input" type="file" accept=".cbz,.zip,application/zip,application/x-cbz,application/vnd.comicbook+zip" multiple hidden>
+</header>
+
+<main>
+  <p id="status" class="status" hidden></p>
+  <p id="empty" class="empty" hidden>
+    Aún no tienes mangas.<br>Toca <b>Importar .cbz</b> y elige tus archivos.<br>
+    Se guardan en este dispositivo y se leen sin internet.
+  </p>
+  <section id="library" class="grid"></section>
+</main>
+
+<div id="reader" class="reader" hidden>
+  <div id="bar-top" class="bar bar-top">
+    <button id="btn-close" class="icon" aria-label="Cerrar">←</button>
+    <div class="title" id="reader-title"></div>
+    <span id="page-info" class="page-info"></span>
+    <button id="btn-dir" class="icon" aria-label="Dirección de lectura" title="Dirección de lectura">⇄</button>
+    <button id="btn-fit" class="icon" aria-label="Ajuste" title="Ajuste">↕</button>
+  </div>
+  <div id="stage" class="stage fit-height">
+    <img id="page" alt="">
+    <p id="loading" class="loading">Cargando…</p>
+  </div>
+  <div id="bar-bottom" class="bar bar-bottom">
+    <input id="slider" type="range" min="1" max="1" value="1">
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="jszip.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
