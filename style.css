@@ -70,6 +70,12 @@ main { padding: 16px; max-width: 1100px; margin: 0 auto; }
   border: 0; background: rgba(0, 0, 0, .6); color: #fff; font-size: 1rem; cursor: pointer;
 }
 
+.card .edit {
+  position: absolute; top: 6px; left: 6px;
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 0; background: rgba(0, 0, 0, .6); color: #fff; font-size: .95rem; cursor: pointer;
+}
+
 /* ---------- Lector ---------- */
 .reader { position: fixed; inset: 0; z-index: 20; background: #000; display: flex; flex-direction: column; }
 .reader[hidden] { display: none; }

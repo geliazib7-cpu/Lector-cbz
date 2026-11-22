@@ -112,6 +112,8 @@
     el.hidden = !msg;
   }
   const prettyName = (n) => n.replace(/\.(cbz|zip)$/i, '');
+  // Nombre que se muestra: el que el usuario le puso o, si no, el del archivo
+  const displayName = (b) => b.title || prettyName(b.name);
   const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
   function listImages(zip) {
@@ -242,7 +244,7 @@
   }
 
   /* ---------------- Dibujar la biblioteca ---------------- */
-  function makeCard({ coverBlob, title, meta, percent, onOpen, onDelete, blankIcon }) {
+  function makeCard({ coverBlob, title, meta, percent, onOpen, onDelete, onRename, blankIcon }) {
     const card = document.createElement('div');
     card.className = 'card';
 
@@ -286,6 +288,15 @@
     del.addEventListener('click', (ev) => { ev.stopPropagation(); onDelete(); });
 
     card.append(cover, info, del);
+    if (onRename) {
+      const edit = document.createElement('button');
+      edit.className = 'edit';
+      edit.type = 'button';
+      edit.textContent = '✎';
+      edit.setAttribute('aria-label', 'Cambiar nombre');
+      edit.addEventListener('click', (ev) => { ev.stopPropagation(); onRename(); });
+      card.appendChild(edit);
+    }
     card.addEventListener('click', onOpen);
     return card;
   }
@@ -347,13 +358,22 @@
       const last = progress[b.id];
       grid.appendChild(makeCard({
         coverBlob: b.cover,
-        title: prettyName(b.name),
+        title: displayName(b),
         meta: Number.isInteger(last) ? `Pág. ${last + 1} de ${b.pages}` : `${b.pages} págs.`,
         percent: Number.isInteger(last) ? Math.min(100, ((last + 1) / b.pages) * 100) : 0,
         blankIcon: '📖',
         onOpen: () => openReader(b.id),
+        onRename: async () => {
+          const raw = prompt('Nombre del capítulo (déjalo vacío para volver al nombre del archivo):', displayName(b));
+          if (raw === null) return;
+          const title = raw.trim();
+          const updated = Object.assign({}, b);
+          if (title && title !== prettyName(b.name)) updated.title = title; else delete updated.title;
+          await putMeta(updated);
+          renderLibrary();
+        },
         onDelete: async () => {
-          if (!confirm(`¿Eliminar "${prettyName(b.name)}" de este dispositivo?`)) return;
+          if (!confirm(`¿Eliminar "${displayName(b)}" de este dispositivo?`)) return;
           await deleteBooks([b.id]);
           delete progress[b.id];
           writeJSON('lcbz-progress', progress);
@@ -436,7 +456,7 @@
 
       clearCache();
       Object.assign(R, { id, meta, zip, entries, siblings: booksIn(meta.folderId) });
-      els.title.textContent = prettyName(meta.name);
+      els.title.textContent = displayName(meta);
       els.slider.max = entries.length;
       applySettings();
       els.reader.classList.add('hide-bars');
@@ -478,7 +498,7 @@
     if (next >= R.entries.length) {
       const following = R.siblings[idx + 1];
       if (following) {
-        toast(`Siguiente: ${prettyName(following.name)}`);
+        toast(`Siguiente: ${displayName(following)}`);
         progress[R.id] = R.entries.length - 1;
         openReader(following.id);
       } else toast('Fin de la carpeta');
@@ -486,7 +506,7 @@
     }
     if (next < 0) {
       const previous = R.siblings[idx - 1];
-      if (previous) { toast(`Anterior: ${prettyName(previous.name)}`); openReader(previous.id, true); }
+      if (previous) { toast(`Anterior: ${displayName(previous)}`); openReader(previous.id, true); }
       return;
     }
     showPage(next);

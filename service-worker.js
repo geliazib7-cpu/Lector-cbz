@@ -1,5 +1,5 @@
 // Sube este número cada vez que cambies index.html, app.js o style.css
-const CACHE = 'lector-cbz-v2';
+const CACHE = 'lector-cbz-v3';
 const ASSETS = ['./', 'index.html', 'style.css', 'app.js', 'jszip.min.js', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (event) => {
