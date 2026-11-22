@@ -27,7 +27,8 @@ body { min-height: 100vh; padding-bottom: env(safe-area-inset-bottom); }
   background: var(--bg);
   border-bottom: 1px solid var(--line);
 }
-.topbar h1 { flex: 1; margin: 0; font-size: 1.15rem; font-weight: 700; }
+.topbar h1 { flex: 1; min-width: 0; margin: 0; font-size: 1.15rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar [hidden] { display: none !important; }
 
 .btn {
   display: inline-block; cursor: pointer; user-select: none;

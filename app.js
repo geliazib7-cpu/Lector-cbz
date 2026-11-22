@@ -11,10 +11,12 @@
   function db() {
     if (!dbPromise) {
       dbPromise = new Promise((resolve, reject) => {
-        const r = indexedDB.open('lector-cbz', 1);
+        const r = indexedDB.open('lector-cbz', 2);
         r.onupgradeneeded = () => {
-          r.result.createObjectStore('meta', { keyPath: 'id' });
-          r.result.createObjectStore('blobs');
+          const d = r.result;
+          if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta', { keyPath: 'id' });
+          if (!d.objectStoreNames.contains('blobs')) d.createObjectStore('blobs');
+          if (!d.objectStoreNames.contains('folders')) d.createObjectStore('folders', { keyPath: 'id' });
         };
         r.onsuccess = () => resolve(r.result);
         r.onerror = () => reject(r.error);
@@ -37,6 +39,23 @@
     const list = await wrap(d.transaction('meta').objectStore('meta').getAll());
     return list.sort((a, b) => collator.compare(a.name, b.name));
   }
+  async function getAllFolders() {
+    const d = await db();
+    const list = await wrap(d.transaction('folders').objectStore('folders').getAll());
+    return list.sort((a, b) => collator.compare(a.name, b.name));
+  }
+  async function putFolder(folder) {
+    const d = await db();
+    const tx = d.transaction('folders', 'readwrite');
+    tx.objectStore('folders').put(folder);
+    return txDone(tx);
+  }
+  async function putMeta(meta) {
+    const d = await db();
+    const tx = d.transaction('meta', 'readwrite');
+    tx.objectStore('meta').put(meta);
+    return txDone(tx);
+  }
   async function getBlob(id) {
     const d = await db();
     return wrap(d.transaction('blobs').objectStore('blobs').get(id));
@@ -52,11 +71,17 @@
     const d = await db();
     return !!(await wrap(d.transaction('meta').objectStore('meta').getKey(id)));
   }
-  async function deleteBook(id) {
+  async function deleteBooks(ids) {
     const d = await db();
     const tx = d.transaction(['meta', 'blobs'], 'readwrite');
-    tx.objectStore('meta').delete(id);
-    tx.objectStore('blobs').delete(id);
+    ids.forEach((id) => { tx.objectStore('meta').delete(id); tx.objectStore('blobs').delete(id); });
+    return txDone(tx);
+  }
+  async function deleteFolder(folderId, bookIds) {
+    await deleteBooks(bookIds);
+    const d = await db();
+    const tx = d.transaction('folders', 'readwrite');
+    tx.objectStore('folders').delete(folderId);
     return txDone(tx);
   }
 
@@ -87,6 +112,7 @@
     el.hidden = !msg;
   }
   const prettyName = (n) => n.replace(/\.(cbz|zip)$/i, '');
+  const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
   function listImages(zip) {
     return Object.values(zip.files)
@@ -121,8 +147,34 @@
     }
   }
 
+  /* ---------------- Estado de la biblioteca ---------------- */
+  let folders = [];
+  let allBooks = [];
+  const view = { folderId: null };
+  let folderPushed = false;
+  let coverUrls = [];
+
+  const currentFolder = () => folders.find((f) => f.id === view.folderId) || null;
+  const booksIn = (folderId) => allBooks.filter((b) => b.folderId === folderId);
+
+  // Los capítulos importados con la versión anterior (sin carpeta) se agrupan en una carpeta
+  async function migrateLoose() {
+    const metas = await getAllMeta();
+    const loose = metas.filter((m) => !m.folderId);
+    if (!loose.length) return;
+    const existing = await getAllFolders();
+    let target = existing.find((f) => f.name === 'Sin carpeta');
+    if (!target) {
+      target = { id: newId(), name: 'Sin carpeta', created: Date.now() };
+      await putFolder(target);
+    }
+    for (const m of loose) await putMeta(Object.assign({}, m, { folderId: target.id }));
+  }
+
   /* ---------------- Importar ---------------- */
   async function importFiles(files) {
+    const folderId = view.folderId;
+    if (!folderId) { toast('Primero abre una carpeta'); return; }
     const list = Array.from(files);
     let ok = 0;
     for (let n = 0; n < list.length; n++) {
@@ -133,14 +185,14 @@
         continue;
       }
       try {
-        const id = `${file.name}|${file.size}|${file.lastModified}`;
-        if (await hasBook(id)) { setStatus(`Ya estaba importado: ${file.name}`); continue; }
+        const id = `${folderId}|${file.name}|${file.size}|${file.lastModified}`;
+        if (await hasBook(id)) { setStatus(`Ya estaba en esta carpeta: ${file.name}`); continue; }
         setStatus(`Importando ${label}…`);
         const zip = await JSZip.loadAsync(file);
         const pages = listImages(zip);
         if (!pages.length) { toast(`"${file.name}" no tiene imágenes.`, 3000); continue; }
         const cover = await makeCover(await entryBlob(pages[0]));
-        await saveBook({ id, name: file.name, pages: pages.length, cover, size: file.size, added: Date.now() }, file);
+        await saveBook({ id, folderId, name: file.name, pages: pages.length, cover, size: file.size, added: Date.now() }, file);
         ok++;
       } catch (e) {
         console.error(e);
@@ -148,80 +200,171 @@
       }
     }
     setStatus('');
-    if (ok) toast(ok === 1 ? 'Manga importado' : `${ok} mangas importados`);
+    if (ok) toast(ok === 1 ? 'Capítulo importado' : `${ok} capítulos importados`);
     await renderLibrary();
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   }
 
-  /* ---------------- Biblioteca ---------------- */
-  let coverUrls = [];
-  let books = [];
+  /* ---------------- Carpetas ---------------- */
+  async function createFolder() {
+    const raw = prompt('Nombre del manga (será una carpeta):');
+    if (raw === null) return;
+    const name = raw.trim();
+    if (!name) { toast('Escribe un nombre'); return; }
+    if (folders.some((f) => f.name.toLowerCase() === name.toLowerCase())) { toast('Ya existe una carpeta con ese nombre', 3000); return; }
+    await putFolder({ id: newId(), name, created: Date.now() });
+    await renderLibrary();
+    toast(`Carpeta "${name}" creada`);
+  }
 
-  async function renderLibrary() {
-    books = await getAllMeta();
-    coverUrls.forEach((u) => URL.revokeObjectURL(u));
-    coverUrls = [];
+  async function renameFolder() {
+    const f = currentFolder();
+    if (!f) return;
+    const raw = prompt('Nuevo nombre de la carpeta:', f.name);
+    if (raw === null) return;
+    const name = raw.trim();
+    if (!name || name === f.name) return;
+    if (folders.some((o) => o.id !== f.id && o.name.toLowerCase() === name.toLowerCase())) { toast('Ya existe una carpeta con ese nombre', 3000); return; }
+    await putFolder(Object.assign({}, f, { name }));
+    await renderLibrary();
+  }
 
-    const grid = $('#library');
-    grid.textContent = '';
-    $('#empty').hidden = books.length > 0;
+  function openFolder(id) {
+    view.folderId = id;
+    history.pushState({ folder: id }, '');
+    folderPushed = true;
+    renderLibrary();
+    window.scrollTo(0, 0);
+  }
+  function leaveFolder() {
+    if (folderPushed) history.back();
+    else { view.folderId = null; renderLibrary(); }
+  }
 
-    for (const b of books) {
-      const card = document.createElement('div');
-      card.className = 'card';
+  /* ---------------- Dibujar la biblioteca ---------------- */
+  function makeCard({ coverBlob, title, meta, percent, onOpen, onDelete, blankIcon }) {
+    const card = document.createElement('div');
+    card.className = 'card';
 
-      let cover;
-      if (b.cover) {
-        cover = document.createElement('img');
-        cover.className = 'cover';
-        cover.alt = '';
-        const u = URL.createObjectURL(b.cover);
-        coverUrls.push(u);
-        cover.src = u;
-      } else {
-        cover = document.createElement('div');
-        cover.className = 'cover blank';
-        cover.textContent = '📖';
-      }
+    let cover;
+    if (coverBlob) {
+      cover = document.createElement('img');
+      cover.className = 'cover';
+      cover.alt = '';
+      const u = URL.createObjectURL(coverBlob);
+      coverUrls.push(u);
+      cover.src = u;
+    } else {
+      cover = document.createElement('div');
+      cover.className = 'cover blank';
+      cover.textContent = blankIcon;
+    }
 
-      const info = document.createElement('div');
-      info.className = 'info';
-      const name = document.createElement('div');
-      name.className = 'name';
-      name.textContent = prettyName(b.name);
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-      const last = progress[b.id];
-      meta.textContent = last ? `Pág. ${last + 1} de ${b.pages}` : `${b.pages} págs.`;
+    const info = document.createElement('div');
+    info.className = 'info';
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = title;
+    const m = document.createElement('div');
+    m.className = 'meta';
+    m.textContent = meta;
+    info.append(name, m);
+    if (percent !== null && percent !== undefined) {
       const bar = document.createElement('div');
       bar.className = 'bar';
       const fill = document.createElement('i');
-      fill.style.width = last ? `${Math.min(100, ((last + 1) / b.pages) * 100)}%` : '0%';
+      fill.style.width = `${percent}%`;
       bar.appendChild(fill);
-      info.append(name, meta, bar);
+      info.appendChild(bar);
+    }
 
-      const del = document.createElement('button');
-      del.className = 'del';
-      del.type = 'button';
-      del.textContent = '✕';
-      del.setAttribute('aria-label', 'Eliminar');
-      del.addEventListener('click', async (ev) => {
-        ev.stopPropagation();
-        if (!confirm(`¿Eliminar "${prettyName(b.name)}" de este dispositivo?`)) return;
-        await deleteBook(b.id);
-        delete progress[b.id];
-        writeJSON('lcbz-progress', progress);
-        renderLibrary();
-      });
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.type = 'button';
+    del.textContent = '✕';
+    del.setAttribute('aria-label', 'Eliminar');
+    del.addEventListener('click', (ev) => { ev.stopPropagation(); onDelete(); });
 
-      card.append(cover, info, del);
-      card.addEventListener('click', () => openReader(b.id));
-      grid.appendChild(card);
+    card.append(cover, info, del);
+    card.addEventListener('click', onOpen);
+    return card;
+  }
+
+  function updateHeader() {
+    const f = currentFolder();
+    $('#btn-back').hidden = !f;
+    $('#btn-rename').hidden = !f;
+    $('#btn-new').hidden = !!f;
+    $('#btn-import').hidden = !f;
+    $('#top-title').textContent = f ? f.name : 'Lector CBZ';
+  }
+
+  async function renderLibrary() {
+    [folders, allBooks] = await Promise.all([getAllFolders(), getAllMeta()]);
+    if (view.folderId && !currentFolder()) view.folderId = null;
+
+    coverUrls.forEach((u) => URL.revokeObjectURL(u));
+    coverUrls = [];
+    updateHeader();
+
+    const grid = $('#library');
+    const empty = $('#empty');
+    grid.textContent = '';
+    const f = currentFolder();
+
+    if (!f) {
+      empty.hidden = folders.length > 0;
+      empty.innerHTML = 'Aún no tienes carpetas.<br>Toca <b>+ Nueva carpeta</b> y ponle el nombre de un manga.<br>Dentro de la carpeta importas sus capítulos (.cbz).';
+      for (const folder of folders) {
+        const inside = booksIn(folder.id);
+        grid.appendChild(makeCard({
+          coverBlob: inside.length ? inside[0].cover : null,
+          title: folder.name,
+          meta: inside.length === 1 ? '1 capítulo' : `${inside.length} capítulos`,
+          percent: null,
+          blankIcon: '📁',
+          onOpen: () => openFolder(folder.id),
+          onDelete: async () => {
+            const n = inside.length;
+            const msg = n
+              ? `¿Eliminar la carpeta "${folder.name}" y sus ${n} capítulos de este dispositivo?`
+              : `¿Eliminar la carpeta "${folder.name}"?`;
+            if (!confirm(msg)) return;
+            await deleteFolder(folder.id, inside.map((b) => b.id));
+            inside.forEach((b) => { delete progress[b.id]; });
+            writeJSON('lcbz-progress', progress);
+            renderLibrary();
+          },
+        }));
+      }
+      return;
+    }
+
+    const inside = booksIn(f.id);
+    empty.hidden = inside.length > 0;
+    empty.innerHTML = 'Esta carpeta está vacía.<br>Toca <b>+ Importar .cbz</b> y elige los capítulos de este manga.';
+    for (const b of inside) {
+      const last = progress[b.id];
+      grid.appendChild(makeCard({
+        coverBlob: b.cover,
+        title: prettyName(b.name),
+        meta: Number.isInteger(last) ? `Pág. ${last + 1} de ${b.pages}` : `${b.pages} págs.`,
+        percent: Number.isInteger(last) ? Math.min(100, ((last + 1) / b.pages) * 100) : 0,
+        blankIcon: '📖',
+        onOpen: () => openReader(b.id),
+        onDelete: async () => {
+          if (!confirm(`¿Eliminar "${prettyName(b.name)}" de este dispositivo?`)) return;
+          await deleteBooks([b.id]);
+          delete progress[b.id];
+          writeJSON('lcbz-progress', progress);
+          renderLibrary();
+        },
+      }));
     }
   }
 
   /* ---------------- Lector ---------------- */
-  const R = { open: false, id: null, meta: null, zip: null, entries: [], i: 0, cache: new Map(), token: 0, pushed: false };
+  const R = { open: false, id: null, meta: null, zip: null, entries: [], siblings: [], i: 0, cache: new Map(), token: 0, pushed: false };
   const els = {
     reader: $('#reader'), stage: $('#stage'), img: $('#page'), loading: $('#loading'),
     title: $('#reader-title'), info: $('#page-info'), slider: $('#slider'),
@@ -282,7 +425,7 @@
   }
 
   async function openReader(id, startAtEnd) {
-    const meta = books.find((b) => b.id === id);
+    const meta = allBooks.find((b) => b.id === id);
     if (!meta) return;
     try {
       const blob = await getBlob(id);
@@ -292,7 +435,7 @@
       if (!entries.length) { toast('Este archivo no tiene imágenes.'); return; }
 
       clearCache();
-      Object.assign(R, { id, meta, zip, entries });
+      Object.assign(R, { id, meta, zip, entries, siblings: booksIn(meta.folderId) });
       els.title.textContent = prettyName(meta.name);
       els.slider.max = entries.length;
       applySettings();
@@ -331,23 +474,25 @@
   function go(dir) {
     if (!R.open) return;
     const next = R.i + dir;
+    const idx = R.siblings.findIndex((b) => b.id === R.id);
     if (next >= R.entries.length) {
-      const idx = books.findIndex((b) => b.id === R.id);
-      const following = books[idx + 1];
-      if (following) { toast(`Siguiente: ${prettyName(following.name)}`); progress[R.id] = R.entries.length - 1; openReader(following.id); }
-      else toast('Fin de la biblioteca');
+      const following = R.siblings[idx + 1];
+      if (following) {
+        toast(`Siguiente: ${prettyName(following.name)}`);
+        progress[R.id] = R.entries.length - 1;
+        openReader(following.id);
+      } else toast('Fin de la carpeta');
       return;
     }
     if (next < 0) {
-      const idx = books.findIndex((b) => b.id === R.id);
-      const previous = books[idx - 1];
+      const previous = R.siblings[idx - 1];
       if (previous) { toast(`Anterior: ${prettyName(previous.name)}`); openReader(previous.id, true); }
       return;
     }
     showPage(next);
   }
 
-  // Zonas de toque: lado "siguiente" depende de la dirección de lectura
+  // Zonas de toque: el lado "siguiente" depende de la dirección de lectura
   let ignoreClickUntil = 0;
   els.stage.addEventListener('click', (ev) => {
     if (Date.now() < ignoreClickUntil) return;
@@ -386,7 +531,16 @@
   });
 
   $('#btn-close').addEventListener('click', () => { if (R.pushed) history.back(); else closeReader(); });
-  window.addEventListener('popstate', () => { if (R.open) closeReader(); });
+
+  // El botón "atrás" del teléfono: primero cierra el lector, luego sale de la carpeta
+  window.addEventListener('popstate', () => {
+    if (R.open) { closeReader(); return; }
+    if (view.folderId) {
+      view.folderId = null;
+      folderPushed = false;
+      renderLibrary();
+    }
+  });
 
   $('#btn-dir').addEventListener('click', () => {
     settings.rtl = !settings.rtl; saveSettings(); applySettings();
@@ -401,6 +555,9 @@
   els.slider.addEventListener('input', () => { els.info.textContent = `${els.slider.value} / ${R.entries.length}`; });
 
   /* ---------------- Arranque ---------------- */
+  $('#btn-new').addEventListener('click', createFolder);
+  $('#btn-rename').addEventListener('click', renameFolder);
+  $('#btn-back').addEventListener('click', leaveFolder);
   $('#file-input').addEventListener('change', async (ev) => {
     const files = ev.target.files;
     if (files && files.length) await importFiles(files);
@@ -408,10 +565,12 @@
   });
 
   applySettings();
-  renderLibrary().catch((e) => {
-    console.error(e);
-    setStatus('No se pudo abrir el almacenamiento local del navegador.');
-  });
+  migrateLoose()
+    .then(renderLibrary)
+    .catch((e) => {
+      console.error(e);
+      setStatus('No se pudo abrir el almacenamiento local del navegador.');
+    });
 
   if ('serviceWorker' in navigator) {
     const hadController = !!navigator.serviceWorker.controller;

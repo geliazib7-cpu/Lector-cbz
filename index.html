@@ -15,17 +15,17 @@
 <body>
 
 <header class="topbar">
-  <h1>Lector CBZ</h1>
-  <label class="btn primary" for="file-input">+ Importar .cbz</label>
+  <button id="btn-back" class="icon" aria-label="Volver" hidden>←</button>
+  <h1 id="top-title">Lector CBZ</h1>
+  <button id="btn-rename" class="icon" aria-label="Renombrar carpeta" title="Renombrar carpeta" hidden>✎</button>
+  <button id="btn-new" class="btn primary" type="button">+ Nueva carpeta</button>
+  <label id="btn-import" class="btn primary" for="file-input" hidden>+ Importar .cbz</label>
   <input id="file-input" type="file" accept=".cbz,.zip,application/zip,application/x-cbz,application/vnd.comicbook+zip" multiple hidden>
 </header>
 
 <main>
   <p id="status" class="status" hidden></p>
-  <p id="empty" class="empty" hidden>
-    Aún no tienes mangas.<br>Toca <b>Importar .cbz</b> y elige tus archivos.<br>
-    Se guardan en este dispositivo y se leen sin internet.
-  </p>
+  <p id="empty" class="empty" hidden></p>
   <section id="library" class="grid"></section>
 </main>
 
