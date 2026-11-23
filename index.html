@@ -10,6 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
+<script>try{var s=JSON.parse(localStorage.getItem('lcbz-settings'));if(s&&s.theme)document.documentElement.dataset.theme=s.theme}catch(e){}</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -18,8 +19,10 @@
   <button id="btn-back" class="icon" aria-label="Volver" hidden>←</button>
   <h1 id="top-title">Lector CBZ</h1>
   <button id="btn-rename" class="icon" aria-label="Renombrar carpeta" title="Renombrar carpeta" hidden>✎</button>
+  <button id="btn-cover" class="icon" aria-label="Portada de la carpeta" title="Portada de la carpeta" hidden>🖼</button>
   <button id="btn-new" class="btn primary" type="button">+ Nueva carpeta</button>
   <label id="btn-import" class="btn primary" for="file-input" hidden>+ Importar .cbz</label>
+  <button id="btn-settings" class="icon" aria-label="Configuración" title="Configuración">⚙</button>
   <input id="file-input" type="file" accept=".cbz,.zip,application/zip,application/x-cbz,application/vnd.comicbook+zip" multiple hidden>
 </header>
 
@@ -29,16 +32,22 @@
   <section id="library" class="grid"></section>
 </main>
 
+<input id="cover-input" type="file" accept="image/*" hidden>
+<button id="btn-resume" class="resume" type="button" hidden>
+  <span class="r-main">▶ Reanudar</span>
+  <span id="resume-sub" class="r-sub"></span>
+</button>
+
 <div id="reader" class="reader" hidden>
   <div id="bar-top" class="bar bar-top">
     <button id="btn-close" class="icon" aria-label="Cerrar">←</button>
     <div class="title" id="reader-title"></div>
     <span id="page-info" class="page-info"></span>
-    <button id="btn-dir" class="icon" aria-label="Dirección de lectura" title="Dirección de lectura">⇄</button>
-    <button id="btn-fit" class="icon" aria-label="Ajuste" title="Ajuste">↕</button>
+    <button id="btn-set" class="icon" aria-label="Configuración" title="Configuración">⚙</button>
   </div>
   <div id="stage" class="stage fit-height">
     <img id="page" alt="">
+    <div id="strip" class="strip"></div>
     <p id="loading" class="loading">Cargando…</p>
   </div>
   <div id="bar-bottom" class="bar bar-bottom">
@@ -46,6 +55,63 @@
   </div>
 </div>
 
+<div id="settings" class="sheet" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet-body">
+    <div class="sheet-head"><b>Configuración</b><button id="set-close" class="icon" aria-label="Cerrar">✕</button></div>
+    <div class="row">
+      <span>Tema</span>
+      <div class="seg" data-key="theme">
+        <button type="button" data-val="dark">🌙 Noche</button>
+        <button type="button" data-val="light">☀️ Día</button>
+      </div>
+    </div>
+    <div class="row">
+      <span>Brillo de la pantalla</span>
+      <div class="slide"><input id="set-bright" type="range" min="20" max="100" step="5" value="100"><output id="set-bright-out">100%</output></div>
+    </div>
+    <div class="row">
+      <span>Modo de lectura</span>
+      <div class="seg" data-key="mode">
+        <button type="button" data-val="page">📄 Página</button>
+        <button type="button" data-val="strip">📜 Tira</button>
+      </div>
+    </div>
+    <div class="row page-only">
+      <span>Dirección (modo página)</span>
+      <div class="seg" data-key="rtl">
+        <button type="button" data-val="1">← Manga (der. a izq.)</button>
+        <button type="button" data-val="0">Cómic (izq. a der.) →</button>
+      </div>
+    </div>
+    <div class="row page-only">
+      <span>Ajuste de la imagen (modo página)</span>
+      <div class="seg" data-key="fit">
+        <button type="button" data-val="height">A la pantalla</button>
+        <button type="button" data-val="width">Al ancho</button>
+      </div>
+    </div>
+    <div class="row">
+      <span>Mantener la pantalla encendida al leer</span>
+      <div class="seg" data-key="awake">
+        <button type="button" data-val="1">Sí</button>
+        <button type="button" data-val="0">No</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="covers" class="sheet" hidden>
+  <div class="sheet-backdrop"></div>
+  <div class="sheet-body tall">
+    <div class="sheet-head"><b>Elige la portada</b><button id="covers-close" class="icon" aria-label="Cerrar">✕</button></div>
+    <button id="covers-device" class="btn" type="button">📁 Usar una imagen de mi dispositivo</button>
+    <p class="hint">O toca una página de este capítulo:</p>
+    <div id="covers-grid" class="thumbs"></div>
+  </div>
+</div>
+
+<div id="dim" class="dim"></div>
 <div id="toast" class="toast" hidden></div>
 
 <script src="jszip.min.js"></script>
