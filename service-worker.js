@@ -1,6 +1,6 @@
 // Sube este número cada vez que cambies index.html, app.js o style.css
-const CACHE = 'lector-cbz-v5';
-const ASSETS = ['./', 'index.html', 'style.css', 'app.js', 'jszip.min.js', 'manifest.json', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'lector-cbz-v6';
+const ASSETS = ['./', 'index.html', 'style.css', 'app.js', 'jszip.min.js', 'firebase-config.js', 'firebase-bundle.js', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

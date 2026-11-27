@@ -28,6 +28,7 @@
 
 <main>
   <p id="status" class="status" hidden></p>
+  <button id="login-hint" class="hint-banner" type="button" hidden>☁ Inicia sesión para ver tus mangas y tu avance en todos tus dispositivos</button>
   <p id="empty" class="empty" hidden></p>
   <section id="library" class="grid"></section>
 </main>
@@ -59,6 +60,14 @@
   <div class="sheet-backdrop" data-close></div>
   <div class="sheet-body">
     <div class="sheet-head"><b>Configuración</b><button id="set-close" class="icon" aria-label="Cerrar">✕</button></div>
+    <div class="row">
+      <span>Cuenta y sincronización</span>
+      <div id="acct-text" class="acct-text"></div>
+      <div class="form-actions">
+        <button id="acct-btn" class="btn" type="button">Iniciar sesión</button>
+        <button id="acct-sync" class="btn" type="button" hidden>↻ Sincronizar ahora</button>
+      </div>
+    </div>
     <div class="row">
       <span>Tema</span>
       <div class="seg" data-key="theme">
@@ -101,6 +110,24 @@
   </div>
 </div>
 
+<div id="login" class="sheet" hidden>
+  <div class="sheet-backdrop"></div>
+  <div class="sheet-body">
+    <div class="sheet-head"><b>Iniciar sesión</b><button id="login-close" class="icon" type="button" aria-label="Cerrar">✕</button></div>
+    <p class="hint" style="margin-top:0">Entra con tu correo y tus mangas, portadas y avance serán los mismos en todos tus dispositivos.</p>
+    <form id="login-form">
+      <input id="login-email" class="field" type="email" autocomplete="email" placeholder="Correo electrónico" required>
+      <input id="login-pass" class="field" type="password" autocomplete="current-password" placeholder="Contraseña (mínimo 6 caracteres)" required minlength="6">
+      <p id="login-msg" class="form-msg" hidden></p>
+      <div class="form-actions">
+        <button class="btn primary" type="submit">Entrar</button>
+        <button id="login-signup" class="btn" type="button">Crear cuenta</button>
+      </div>
+      <button id="login-reset" class="linklike" type="button">Olvidé mi contraseña</button>
+    </form>
+  </div>
+</div>
+
 <div id="covers" class="sheet" hidden>
   <div class="sheet-backdrop"></div>
   <div class="sheet-body tall">
@@ -115,6 +142,8 @@
 <div id="toast" class="toast" hidden></div>
 
 <script src="jszip.min.js"></script>
+<script src="firebase-config.js"></script>
+<script src="firebase-bundle.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
